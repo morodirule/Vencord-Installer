@@ -119,5 +119,4 @@ jobs:
           draft: true
           files: |
             build-linux/*
-            build-macos/*
             build-windows/*
