@@ -125,10 +125,15 @@ func InitGithubDownloader() {
 	scanner := bufio.NewScanner(f)
 	if scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "// Vencord ") {
-			InstalledHash = line[11:]
-			Log.Debug("Existing hash is", InstalledHash)
-		} else {
+		// Equicord builds use "// Equicord <hash>", vanilla uses "// Vencord <hash>"
+		for _, prefix := range []string{"// Vencord ", "// Equicord "} {
+			if strings.HasPrefix(line, prefix) {
+				InstalledHash = line[len(prefix):]
+				Log.Debug("Existing hash is", InstalledHash)
+				break
+			}
+		}
+		if InstalledHash == "None" {
 			Log.Debug("Didn't find hash")
 		}
 	}
@@ -153,10 +158,11 @@ func installLatestBuilds() (retErr error) {
 	var downloadedFiles atomic.Uint64
 
 	for _, ass := range ReleaseData.Assets {
-		if strings.HasPrefix(ass.Name, "patcher.js") ||
-			strings.HasPrefix(ass.Name, "preload.js") ||
-			strings.HasPrefix(ass.Name, "renderer.js") ||
-			strings.HasPrefix(ass.Name, "renderer.css") {
+		// Exact match: HasPrefix would also match patcher.js.LEGAL.txt etc.
+		if ass.Name == "patcher.js" ||
+			ass.Name == "preload.js" ||
+			ass.Name == "renderer.js" ||
+			ass.Name == "renderer.css" {
 			wg.Add(1)
 			ass := ass // Need to do this to not have the variable be overwritten halfway through
 			go func() {
