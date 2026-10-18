@@ -29,13 +29,43 @@ func init() {
 		BaseDir = path.Join(dir, "..", "VencordData")
 	} else {
 		Log.Debug("Using UserConfig")
-		configDir := os.Getenv("XDG_CONFIG_HOME")
-		if configDir == "" {
-			configDir = filepath.Join(os.Getenv("HOME"), ".config")
+		// os.UserConfigDir() is the cross-platform way to get the config dir:
+		// - Windows: %AppData% (e.g. C:\Users\User\AppData\Roaming)
+		// - macOS: ~/Library/Application Support
+		// - Linux: $XDG_CONFIG_HOME or ~/.config
+		// The old code used os.Getenv("HOME") which is almost always empty on
+		// Windows, producing a relative path like ".config\Vencord\dist\patcher.js".
+		// That relative path was baked into app.asar's index.js
+		// (require(".config\\Vencord\\dist\\patcher.js")), so Discord failed
+		// to start with "Cannot find module '.config\Vencord\dist\patcher.js'".
+		configDir, err := os.UserConfigDir()
+		if err != nil || configDir == "" {
+			Log.Warn("Failed to get user config dir, falling back to HOME/.config:", err)
+			configDir = os.Getenv("XDG_CONFIG_HOME")
+			if configDir == "" {
+				home, _ := os.UserHomeDir()
+				if home == "" {
+					home = os.Getenv("HOME")
+				}
+				// As a last resort on Windows, USERPROFILE is always set
+				if home == "" {
+					home = os.Getenv("USERPROFILE")
+				}
+				configDir = filepath.Join(home, ".config")
+			}
 		}
 		BaseDir = path.Join(configDir, "Vencord")
 	}
 	FilesDir = path.Join(BaseDir, "dist")
+	// The patcher path is baked into app.asar as require("<path>"). It must
+	// be absolute, otherwise Discord fails to start with
+	// "Cannot find module '.config\Vencord\dist\patcher.js'".
+	if abs, err := filepath.Abs(BaseDir); err == nil {
+		BaseDir = abs
+		FilesDir = path.Join(BaseDir, "dist")
+	} else {
+		Log.Warn("Failed to resolve absolute BaseDir:", err)
+	}
 	if !ExistsFile(FilesDir) {
 		FilesDirErr = os.MkdirAll(FilesDir, 0755)
 		if FilesDirErr != nil {
